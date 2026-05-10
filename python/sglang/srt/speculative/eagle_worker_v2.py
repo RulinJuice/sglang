@@ -30,6 +30,7 @@ from sglang.srt.managers.io_struct import (
 from sglang.srt.managers.schedule_batch import ModelWorkerBatch
 from sglang.srt.managers.scheduler import GenerationBatchResult
 from sglang.srt.managers.tp_worker import TpModelWorker
+from sglang.srt.model_executor import weight_updater
 from sglang.srt.model_executor.cuda_graph_runner import CudaGraphRunner
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch
 from sglang.srt.server_args import ServerArgs
@@ -1182,9 +1183,10 @@ class EAGLEWorkerV2(BaseSpecWorker):
         )
 
     def update_weights_from_disk(self, recv_req: UpdateWeightFromDiskReqInput):
-        success, message = self._draft_worker.draft_runner.update_weights_from_disk(
-            recv_req.model_path,
-            recv_req.load_format,
+        success, message = weight_updater.update_weights_from_disk(
+            model_runner_ref=self._draft_worker.draft_runner,
+            model_path=recv_req.model_path,
+            load_format=recv_req.load_format,
             recapture_cuda_graph=recv_req.recapture_cuda_graph,
         )
         if not success:

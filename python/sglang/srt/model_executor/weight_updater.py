@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import gc
 import logging
+from typing import Callable, Optional
 
 import torch
 
-from sglang.srt.utils import init_custom_process_group
+from sglang.srt.configs.load_config import LoadConfig
+from sglang.srt.model_loader.loader import DefaultModelLoader, get_model_loader
+from sglang.srt.model_loader.utils import set_default_torch_dtype
+from sglang.srt.platforms import current_platform
+from sglang.srt.utils import get_available_gpu_memory, init_custom_process_group
 from sglang.srt.utils.network import NetworkAddress
 
 logger = logging.getLogger(__name__)
@@ -71,3 +77,74 @@ def destroy_weights_update_group(*, _model_update_group, group_name):
         message = f"Failed to destroy custom process group: {e}."
         logger.error(message)
         return False, message
+
+
+def update_weights_from_disk(
+    *,
+    model_runner_ref,
+    model_path: str,
+    load_format: str,
+    weight_name_filter: Optional[Callable[[str], bool]] = None,
+    recapture_cuda_graph: bool = False,
+) -> tuple[bool, str]:
+    """Update engine weights in-place from the disk."""
+    logger.info(
+        f"Update engine weights online from disk begin. "
+        f"avail mem={get_available_gpu_memory(model_runner_ref.device, model_runner_ref.gpu_id, empty_cache=False):.2f} GB"
+    )
+
+    target_device = torch.device(model_runner_ref.device)
+    model_runner_ref.model_config.model_path = model_path
+    load_config = LoadConfig(load_format=load_format)
+
+    # Only support DefaultModelLoader for now
+    loader = get_model_loader(load_config, model_runner_ref.model_config)
+    if not isinstance(loader, DefaultModelLoader):
+        message = f"Failed to get model loader: {loader}."
+        return False, message
+
+    def get_weight_iter(config):
+        iter = loader._get_weights_iterator(
+            DefaultModelLoader.Source.init_new(config, model_runner_ref.model)
+        )
+        if weight_name_filter is not None:
+            iter = ((name, weight) for name, weight in iter if weight_name_filter(name))
+
+        return iter
+
+    def model_load_weights(model, iter):
+        loader.load_weights_and_postprocess(model, iter, target_device)
+        return model
+
+    with set_default_torch_dtype(model_runner_ref.model_config.dtype):
+        try:
+            iter = get_weight_iter(model_runner_ref.model_config)
+        except Exception as e:
+            message = f"Failed to get weights iterator: {e}."
+            return False, message
+        try:
+            model = model_load_weights(model_runner_ref.model, iter)
+        except Exception as e:
+            message = (
+                f"Failed to update weights: {e}.\nRolling back to original weights."
+            )
+            del iter
+            gc.collect()
+            iter = get_weight_iter(model_runner_ref.model_config)
+            model_runner_ref.model = model_load_weights(model_runner_ref.model, iter)
+            return False, message
+
+    model_runner_ref.model = model
+    model_runner_ref.server_args.model_path = model_path
+    model_runner_ref.server_args.load_format = load_format
+    model_runner_ref.load_config = load_config
+
+    if recapture_cuda_graph and (
+        model_runner_ref.device == "cuda"
+        or model_runner_ref.device == "musa"
+        or (current_platform.is_out_of_tree() and current_platform.support_cuda_graph())
+    ):
+        model_runner_ref.init_device_graphs()
+
+    logger.info("Update weights end.")
+    return True, "Succeeded to update model weights."

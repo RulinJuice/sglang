@@ -40,6 +40,7 @@ from sglang.srt.managers.schedule_batch import ModelWorkerBatch, ScheduleBatch
 from sglang.srt.managers.scheduler import GenerationBatchResult
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
+from sglang.srt.model_executor import weight_updater
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_executor.pool_configurator import MemoryPoolConfig
 from sglang.srt.model_executor.weight_updater import (
@@ -98,9 +99,10 @@ class BaseTpWorker(ABC):
         )
 
     def update_weights_from_disk(self, recv_req: UpdateWeightFromDiskReqInput):
-        success, message = self.model_runner.update_weights_from_disk(
-            recv_req.model_path,
-            recv_req.load_format,
+        success, message = weight_updater.update_weights_from_disk(
+            model_runner_ref=self.model_runner,
+            model_path=recv_req.model_path,
+            load_format=recv_req.load_format,
             recapture_cuda_graph=recv_req.recapture_cuda_graph,
         )
         return success, message

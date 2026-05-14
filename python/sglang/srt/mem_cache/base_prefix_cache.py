@@ -22,6 +22,9 @@ from sglang.srt.metrics.collector import RadixCacheMetricsCollector
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
     from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache_components.tree_component import (
+        ComponentType,
+    )
 
 
 @runtime_checkable

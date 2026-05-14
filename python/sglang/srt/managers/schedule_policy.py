@@ -619,6 +619,7 @@ class PrefillAdder:
 
     @contextmanager
     def _lock_node(self, last_node: TreeNode):
+        dec_lock_params = None
         try:
             if self.tree_cache.supports_swa() and self.tree_cache.is_tree_cache():
                 swa_uuid_for_lock = self.tree_cache.inc_lock_ref(last_node)

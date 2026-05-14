@@ -274,7 +274,7 @@ class HiCacheController:
 
         if storage_backend is not None:
             self.storage_backend_type = storage_backend
-            from sglang.srt.mem_cache.hicache_storage import get_hash_str
+            from sglang.srt.mem_cache.utils import get_hash_str
 
             self.get_hash_str = get_hash_str
             self.storage_config = self._generate_storage_config(

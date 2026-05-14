@@ -57,7 +57,7 @@ from sglang.srt.mem_cache.evict_policy import (
     MRUStrategy,
     PriorityStrategy,
 )
-from sglang.srt.mem_cache.hicache_storage import get_hash_str, hash_str_to_int64
+from sglang.srt.mem_cache.utils import get_hash_str, hash_str_to_int64
 
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req

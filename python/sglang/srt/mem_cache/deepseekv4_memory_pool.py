@@ -686,7 +686,12 @@ class DeepSeekV4TokenToKVPool(KVCache):
             else:
                 raise ValueError(f"Unsupported compression ratio: {ratio}")
 
+    def wait_layer_transfer(self, layer_id: int) -> None:
+        if self.layer_transfer_counter is not None:
+            self.layer_transfer_counter.wait_until(layer_id - self.start_layer)
+
     def get_attention_compress_states(self, layer_id: int) -> CompressStatePool:
+        self.wait_layer_transfer(layer_id)
         compress_state_pool = self.compress_state_pools[layer_id]
         assert (
             compress_state_pool is not None
@@ -694,6 +699,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         return compress_state_pool
 
     def get_indexer_compress_states(self, layer_id: int) -> CompressStatePool:
+        self.wait_layer_transfer(layer_id)
         indexer_compress_state_pool = self.indexer_compress_state_pools[layer_id]
         assert (
             indexer_compress_state_pool is not None
@@ -701,6 +707,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         return indexer_compress_state_pool
 
     def get_swa_key_buffer(self, layer_id: int) -> torch.Tensor:
+        self.wait_layer_transfer(layer_id)
         return self.swa_kv_pool.get_key_buffer(layer_id)
 
 
@@ -713,6 +720,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         self.swa_kv_pool.set_key_buffer(layer_id, loc, cache_nope_fp8_rope_bf16_pack)
 
     def get_extra_key_buffer(self, layer_id: int) -> torch.Tensor | None:
+        self.wait_layer_transfer(layer_id)
         _, compress_layer_id, compress_kv_pool = self.layer_mapping[layer_id]
         assert compress_kv_pool is not None
         return compress_kv_pool.get_key_buffer(compress_layer_id)
@@ -730,6 +738,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         )
 
     def get_index_k_with_scale_buffer(self, layer_id: int) -> torch.Tensor:
+        self.wait_layer_transfer(layer_id)
         compress_ratio, compress_layer_id, _ = self.layer_mapping[layer_id]
         assert compress_ratio == 4, f"only c4 has indexer, got {compress_ratio = }"
         return self.c4_indexer_kv_pool.get_index_k_with_scale_buffer(compress_layer_id)
@@ -740,6 +749,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         seq_len: int,
         page_indices: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self.wait_layer_transfer(layer_id)
         compress_ratio, compress_layer_id, _ = self.layer_mapping[layer_id]
         assert compress_ratio == 4, f"only c4 has indexer, got {compress_ratio = }"
         return self.c4_indexer_kv_pool.get_index_k_scale_buffer(
@@ -783,6 +793,7 @@ class DeepSeekV4TokenToKVPool(KVCache):
         )
 
     def get_swa_key_buffer_radix(self, layer_id: int) -> torch.Tensor:
+        self.wait_layer_transfer(layer_id)
         return self.swa_kv_pool.get_key_buffer(layer_id)
 
     def set_swa_key_buffer_radix_fused(
